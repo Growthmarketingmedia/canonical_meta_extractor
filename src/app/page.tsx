@@ -11,6 +11,16 @@ interface PageResult {
   metaDescription: string;
 }
 
+interface WwwStatus {
+  siteVersion: "www" | "non-www" | "both" | "unknown";
+  wwwReachable: boolean;
+  nonWwwReachable: boolean;
+  wwwRedirectsTo: string;
+  nonWwwRedirectsTo: string;
+  wwwUrl: string;
+  nonWwwUrl: string;
+}
+
 export default function Home() {
   const [url, setUrl] = useState("");
   const [results, setResults] = useState<PageResult[]>([]);
@@ -21,6 +31,7 @@ export default function Home() {
   const [filter, setFilter] = useState<
     "all" | "Correct" | "Wrong" | "Missing"
   >("all");
+  const [wwwStatus, setWwwStatus] = useState<WwwStatus | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -33,6 +44,7 @@ export default function Home() {
     setProgress(0);
     setStatusMessage("Connecting...");
     setFilter("all");
+    setWwwStatus(null);
 
     abortRef.current = new AbortController();
 
@@ -66,6 +78,8 @@ export default function Home() {
 
           if (data.type === "status") {
             setStatusMessage(data.message);
+          } else if (data.type === "wwwStatus") {
+            setWwwStatus(data);
           } else if (data.type === "total") {
             setTotal(data.total);
             setStatusMessage(`Checking ${data.total} pages...`);
@@ -94,11 +108,23 @@ export default function Home() {
     setStatusMessage("Stopped.");
   };
 
+  // Compute canonical www stats
+  const canonicalsWithWww = results.filter(
+    (r) => r.canonical !== "NONE" && r.canonical !== "ERROR" && r.canonical.includes("://www.")
+  ).length;
+  const canonicalsWithoutWww = results.filter(
+    (r) =>
+      r.canonical !== "NONE" &&
+      r.canonical !== "ERROR" &&
+      !r.canonical.includes("://www.")
+  ).length;
+
   const exportCSV = () => {
     const headers = [
       "Page URL",
       "Canonical URL",
       "Canonical Status",
+      "Canonical Uses WWW",
       "HTTP Status",
       "Meta Title",
       "Meta Description",
@@ -107,6 +133,7 @@ export default function Home() {
       r.page,
       r.canonical,
       r.canonicalStatus,
+      r.canonical.includes("://www.") ? "Yes" : "No",
       r.httpStatus,
       `"${r.metaTitle.replace(/"/g, '""')}"`,
       `"${r.metaDescription.replace(/"/g, '""')}"`,
@@ -196,6 +223,112 @@ export default function Home() {
               className="bg-blue-500 h-2 rounded-full transition-all duration-300"
               style={{ width: `${(progress / total) * 100}%` }}
             />
+          </div>
+        </div>
+      )}
+
+      {/* WWW Status Panel */}
+      {wwwStatus && (
+        <div className="bg-slate-800 rounded-lg p-5 mb-6 border border-slate-700">
+          <h2 className="text-lg font-semibold text-white mb-3">
+            WWW vs Non-WWW Analysis
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Site serves on */}
+            <div className="bg-slate-900/50 rounded-lg p-4">
+              <div className="text-sm text-slate-400 mb-1">Site serves on</div>
+              <div className="text-white font-medium">
+                {wwwStatus.siteVersion === "www" && (
+                  <span className="text-blue-400">www (preferred)</span>
+                )}
+                {wwwStatus.siteVersion === "non-www" && (
+                  <span className="text-blue-400">non-www (preferred)</span>
+                )}
+                {wwwStatus.siteVersion === "both" && (
+                  <span className="text-yellow-400">
+                    Both accessible (no redirect)
+                  </span>
+                )}
+                {wwwStatus.siteVersion === "unknown" && (
+                  <span className="text-red-400">Could not determine</span>
+                )}
+              </div>
+            </div>
+
+            {/* Redirect behavior */}
+            <div className="bg-slate-900/50 rounded-lg p-4">
+              <div className="text-sm text-slate-400 mb-1">
+                Redirect behavior
+              </div>
+              <div className="text-white text-sm space-y-1">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`w-2 h-2 rounded-full ${wwwStatus.wwwReachable ? "bg-green-400" : "bg-red-400"}`}
+                  />
+                  <span>
+                    www{" "}
+                    {wwwStatus.wwwRedirectsTo
+                      ? `redirects to non-www`
+                      : wwwStatus.wwwReachable
+                        ? "accessible"
+                        : "not reachable"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`w-2 h-2 rounded-full ${wwwStatus.nonWwwReachable ? "bg-green-400" : "bg-red-400"}`}
+                  />
+                  <span>
+                    non-www{" "}
+                    {wwwStatus.nonWwwRedirectsTo
+                      ? `redirects to www`
+                      : wwwStatus.nonWwwReachable
+                        ? "accessible"
+                        : "not reachable"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Canonical version usage */}
+            {results.length > 0 && (
+              <div className="bg-slate-900/50 rounded-lg p-4">
+                <div className="text-sm text-slate-400 mb-1">
+                  Canonicals point to
+                </div>
+                <div className="text-white text-sm space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-blue-400 font-medium">
+                      {canonicalsWithWww}
+                    </span>
+                    <span>use www</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-blue-400 font-medium">
+                      {canonicalsWithoutWww}
+                    </span>
+                    <span>use non-www</span>
+                  </div>
+                  {canonicalsWithWww > 0 && canonicalsWithoutWww > 0 && (
+                    <div className="text-yellow-400 text-xs mt-1">
+                      Mixed www/non-www in canonicals — should be consistent
+                    </div>
+                  )}
+                  {wwwStatus.siteVersion === "www" &&
+                    canonicalsWithoutWww > 0 && (
+                      <div className="text-yellow-400 text-xs mt-1">
+                        Site prefers www but some canonicals use non-www
+                      </div>
+                    )}
+                  {wwwStatus.siteVersion === "non-www" &&
+                    canonicalsWithWww > 0 && (
+                      <div className="text-yellow-400 text-xs mt-1">
+                        Site prefers non-www but some canonicals use www
+                      </div>
+                    )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

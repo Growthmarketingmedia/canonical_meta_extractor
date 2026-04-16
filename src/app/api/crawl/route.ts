@@ -81,7 +81,19 @@ async function discoverPages(baseUrl: string): Promise<string[]> {
   // Ensure base URL is included
   pages.add(origin);
 
-  return [...pages].sort();
+  // Filter out non-page URLs (sitemaps, XML files, feeds)
+  const filtered = [...pages].filter((url) => {
+    const path = new URL(url).pathname.toLowerCase();
+    return (
+      !path.endsWith(".xml") &&
+      !path.endsWith("/sitemap.xml") &&
+      !path.includes("sitemap") &&
+      !path.endsWith("/feed") &&
+      !path.endsWith("/rss")
+    );
+  });
+
+  return filtered.sort();
 }
 
 async function checkPage(url: string): Promise<PageResult> {
@@ -135,6 +147,78 @@ async function checkPage(url: string): Promise<PageResult> {
   }
 }
 
+async function checkWwwStatus(inputUrl: string) {
+  const parsed = new URL(inputUrl);
+  const host = parsed.hostname;
+  const hasWww = host.startsWith("www.");
+  const bareHost = hasWww ? host.replace("www.", "") : host;
+  const wwwHost = hasWww ? host : `www.${host}`;
+
+  const wwwUrl = `${parsed.protocol}//www.${bareHost}`;
+  const nonWwwUrl = `${parsed.protocol}//${bareHost}`;
+
+  let wwwReachable = false;
+  let nonWwwReachable = false;
+  let wwwRedirectsTo = "";
+  let nonWwwRedirectsTo = "";
+
+  // Check non-www version
+  try {
+    const res = await fetch(nonWwwUrl, {
+      signal: AbortSignal.timeout(10000),
+      redirect: "follow",
+    });
+    nonWwwReachable = res.ok;
+    const finalUrl = res.url;
+    if (new URL(finalUrl).hostname !== bareHost) {
+      nonWwwRedirectsTo = finalUrl;
+    }
+  } catch {
+    // Not reachable
+  }
+
+  // Check www version
+  try {
+    const res = await fetch(wwwUrl, {
+      signal: AbortSignal.timeout(10000),
+      redirect: "follow",
+    });
+    wwwReachable = res.ok;
+    const finalUrl = res.url;
+    if (new URL(finalUrl).hostname !== wwwHost) {
+      wwwRedirectsTo = finalUrl;
+    }
+  } catch {
+    // Not reachable
+  }
+
+  // Determine which version the site prefers
+  let siteVersion: "www" | "non-www" | "both" | "unknown" = "unknown";
+  if (wwwReachable && nonWwwReachable) {
+    if (nonWwwRedirectsTo.includes("www.")) {
+      siteVersion = "www";
+    } else if (wwwRedirectsTo && !wwwRedirectsTo.includes("www.")) {
+      siteVersion = "non-www";
+    } else {
+      siteVersion = "both"; // Both accessible, no redirect — potential issue
+    }
+  } else if (wwwReachable) {
+    siteVersion = "www";
+  } else if (nonWwwReachable) {
+    siteVersion = "non-www";
+  }
+
+  return {
+    siteVersion,
+    wwwReachable,
+    nonWwwReachable,
+    wwwRedirectsTo,
+    nonWwwRedirectsTo,
+    wwwUrl,
+    nonWwwUrl,
+  };
+}
+
 export async function POST(request: NextRequest) {
   const { url } = await request.json();
 
@@ -162,6 +246,20 @@ export async function POST(request: NextRequest) {
   const stream = new ReadableStream({
     async start(controller) {
       try {
+        // Check www vs non-www status first
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({ type: "status", message: "Checking www vs non-www..." })}\n\n`
+          )
+        );
+
+        const wwwStatus = await checkWwwStatus(baseUrl);
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({ type: "wwwStatus", ...wwwStatus })}\n\n`
+          )
+        );
+
         // Send discovery phase
         controller.enqueue(
           encoder.encode(
