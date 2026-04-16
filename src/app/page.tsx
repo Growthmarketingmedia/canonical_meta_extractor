@@ -696,10 +696,17 @@ export default function Home() {
                           <div className="text-xs text-slate-400">
                             Used on {pages.length} pages:
                           </div>
-                          <ul className="text-xs text-slate-500 mt-1 space-y-0.5">
+                          <ul className="text-xs mt-1 space-y-0.5">
                             {pages.map((p) => (
                               <li key={p} className="truncate">
-                                {new URL(p).pathname || "/"}
+                                <a
+                                  href={p}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-400 hover:text-blue-300 hover:underline"
+                                >
+                                  {new URL(p).pathname || "/"}
+                                </a>
                               </li>
                             ))}
                           </ul>
@@ -741,10 +748,17 @@ export default function Home() {
                           <div className="text-xs text-slate-400">
                             Used on {pages.length} pages:
                           </div>
-                          <ul className="text-xs text-slate-500 mt-1 space-y-0.5">
+                          <ul className="text-xs mt-1 space-y-0.5">
                             {pages.map((p) => (
                               <li key={p} className="truncate">
-                                {new URL(p).pathname || "/"}
+                                <a
+                                  href={p}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-400 hover:text-blue-300 hover:underline"
+                                >
+                                  {new URL(p).pathname || "/"}
+                                </a>
                               </li>
                             ))}
                           </ul>
