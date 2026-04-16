@@ -23,10 +23,15 @@ interface WwwStatus {
 
 interface SitemapInfo {
   found: boolean;
+  source: string;
+  sitemapUrl: string;
   totalUrls: number;
   urlsWithWww: number;
   urlsWithoutWww: number;
   sampleUrls: string[];
+  robotsTxtExists: boolean;
+  robotsDeclaredSitemap: string;
+  robotsSitemapBroken: boolean;
 }
 
 export default function Home() {
@@ -495,14 +500,42 @@ export default function Home() {
             {sitemapInfo && (
               <div className="bg-slate-900/50 rounded-lg p-4">
                 <div className="text-sm text-slate-400 mb-1">
-                  Sitemap URLs
+                  Sitemap
                 </div>
                 {!sitemapInfo.found ? (
-                  <div className="text-yellow-400 text-sm">
-                    No sitemap.xml found
+                  <div className="text-sm space-y-1">
+                    <div className="text-red-400 font-medium">
+                      No sitemap found
+                    </div>
+                    {sitemapInfo.robotsSitemapBroken && (
+                      <div className="text-red-400 text-xs">
+                        robots.txt declares sitemap at{" "}
+                        <span className="text-slate-300">
+                          {new URL(sitemapInfo.robotsDeclaredSitemap).pathname}
+                        </span>{" "}
+                        but it returns 404
+                      </div>
+                    )}
+                    {!sitemapInfo.robotsTxtExists && (
+                      <div className="text-yellow-400 text-xs">
+                        No robots.txt found either
+                      </div>
+                    )}
+                    {sitemapInfo.robotsTxtExists &&
+                      !sitemapInfo.robotsDeclaredSitemap && (
+                        <div className="text-yellow-400 text-xs">
+                          robots.txt exists but has no Sitemap declaration
+                        </div>
+                      )}
+                    <div className="text-slate-500 text-xs">
+                      Pages discovered from homepage links only
+                    </div>
                   </div>
                 ) : (
                   <div className="text-white text-sm space-y-1">
+                    <div className="text-green-400 text-xs font-medium">
+                      Found via {sitemapInfo.source}
+                    </div>
                     <div className="flex items-center gap-2">
                       <span className="text-blue-400 font-medium">
                         {sitemapInfo.urlsWithWww}
