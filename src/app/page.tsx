@@ -304,9 +304,15 @@ export default function Home() {
     (r) => r.canonicalStatus === "Redirect"
   ).length;
 
+  // Exclude redirecting pages from duplicate detection —
+  // they share meta with their target by design, not a real duplicate.
+  const dedupeResults = results.filter(
+    (r) => r.canonicalStatus !== "Redirect"
+  );
+
   // Find duplicate meta titles (dedupe by pathname to avoid www/non-www false positives)
   const titleMap = new Map<string, string[]>();
-  results.forEach((r) => {
+  dedupeResults.forEach((r) => {
     if (r.metaTitle) {
       const path = new URL(r.page).pathname || "/";
       const existing = titleMap.get(r.metaTitle) || [];
@@ -323,7 +329,7 @@ export default function Home() {
 
   // Find duplicate meta descriptions (dedupe by pathname)
   const descMap = new Map<string, string[]>();
-  results.forEach((r) => {
+  dedupeResults.forEach((r) => {
     if (r.metaDescription) {
       const path = new URL(r.page).pathname || "/";
       const existing = descMap.get(r.metaDescription) || [];
