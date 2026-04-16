@@ -1018,6 +1018,7 @@ export default function Home() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-800 text-slate-300">
+                  <th className="px-2 py-3 font-medium w-8"></th>
                   <th className="text-left px-4 py-3 font-medium">#</th>
                   <th className="text-left px-4 py-3 font-medium">Page URL</th>
                   <th className="text-left px-4 py-3 font-medium">
@@ -1027,7 +1028,6 @@ export default function Home() {
                   <th className="text-left px-4 py-3 font-medium">HTTP</th>
                   <th className="text-left px-4 py-3 font-medium">Indexable</th>
                   <th className="text-left px-4 py-3 font-medium">Crawlable</th>
-                  <th className="text-left px-4 py-3 font-medium">Images</th>
                   <th className="text-left px-4 py-3 font-medium">
                     Meta Title
                   </th>
@@ -1042,6 +1042,33 @@ export default function Home() {
                   <tr
                     className="border-t border-slate-700 hover:bg-slate-800/50"
                   >
+                    <td className="px-2 py-3 align-middle">
+                      {r.images && r.images.length > 0 ? (
+                        <button
+                          onClick={() => toggleImagesRow(r.page)}
+                          className="flex items-center justify-center w-6 h-6 rounded text-slate-400 hover:text-blue-400 hover:bg-slate-700 transition-colors"
+                          title={`${r.images.length} image${r.images.length > 1 ? "s" : ""}${r.imagesMissingAlt > 0 ? `, ${r.imagesMissingAlt} missing alt` : ""}`}
+                        >
+                          <svg
+                            className={`w-3.5 h-3.5 transition-transform ${
+                              expandedImages.has(r.page) ? "rotate-90" : ""
+                            }`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2.5}
+                              d="M9 5l7 7-7 7"
+                            />
+                          </svg>
+                        </button>
+                      ) : (
+                        <span className="block w-6 h-6"></span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-slate-400">{i + 1}</td>
                     <td className="px-4 py-3">
                       <a
@@ -1113,43 +1140,6 @@ export default function Home() {
                         {r.crawlable}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      {r.images && r.images.length > 0 ? (
-                        <button
-                          onClick={() => toggleImagesRow(r.page)}
-                          className="flex items-center gap-2 text-sm hover:text-blue-300 transition-colors"
-                        >
-                          <svg
-                            className={`w-3 h-3 transition-transform ${
-                              expandedImages.has(r.page) ? "rotate-90" : ""
-                            }`}
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M9 5l7 7-7 7"
-                            />
-                          </svg>
-                          <span className="text-slate-300">{r.images.length}</span>
-                          {r.imagesMissingAlt > 0 && (
-                            <span className="inline-block px-1.5 py-0.5 rounded text-xs bg-red-900/50 text-red-400">
-                              {r.imagesMissingAlt} no alt
-                            </span>
-                          )}
-                          {r.imagesMissingAlt === 0 && r.images.length > 0 && (
-                            <span className="inline-block px-1.5 py-0.5 rounded text-xs bg-green-900/50 text-green-400">
-                              all alt
-                            </span>
-                          )}
-                        </button>
-                      ) : (
-                        <span className="text-slate-500 text-xs">0</span>
-                      )}
-                    </td>
                     <td className="px-4 py-3 text-slate-300 max-w-[200px]">
                       <div className="truncate" title={r.metaTitle}>
                         {r.metaTitle || (
@@ -1167,12 +1157,26 @@ export default function Home() {
                   </tr>
                   {expandedImages.has(r.page) && r.images && r.images.length > 0 && (
                     <tr className="bg-slate-900/40">
-                      <td colSpan={11} className="px-4 py-3">
-                        <div className="text-xs text-slate-400 mb-2">
-                          Images on{" "}
-                          <span className="text-slate-300">
-                            {new URL(r.page).pathname || "/"}
+                      <td colSpan={10} className="px-4 py-3">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="text-xs text-slate-400">
+                            Images on{" "}
+                            <span className="text-slate-300 font-medium">
+                              {new URL(r.page).pathname || "/"}
+                            </span>
+                          </div>
+                          <span className="text-xs px-2 py-0.5 rounded bg-slate-700 text-slate-300">
+                            {r.images.length} total
                           </span>
+                          {r.imagesMissingAlt > 0 ? (
+                            <span className="text-xs px-2 py-0.5 rounded bg-red-900/50 text-red-400">
+                              {r.imagesMissingAlt} missing alt
+                            </span>
+                          ) : (
+                            <span className="text-xs px-2 py-0.5 rounded bg-green-900/50 text-green-400">
+                              All have alt
+                            </span>
+                          )}
                         </div>
                         <div className="overflow-x-auto">
                           <table className="w-full text-xs">
