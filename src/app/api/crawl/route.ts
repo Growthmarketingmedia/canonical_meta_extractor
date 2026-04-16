@@ -11,6 +11,70 @@ interface PageResult {
   redirectTo?: string;
   robots: string;
   indexable: "Indexable" | "Noindex" | "Unknown";
+  crawlable: "Allowed" | "Disallowed";
+  blockingRule?: string;
+}
+
+// Parse robots.txt and return Disallow rules that apply to the universal user-agent (*)
+function parseRobotsDisallowRules(robotsTxt: string): string[] {
+  const lines = robotsTxt.split(/\r?\n/);
+  const rules: string[] = [];
+  let inUniversalGroup = false;
+
+  for (const rawLine of lines) {
+    // Strip comments
+    const line = rawLine.replace(/#.*$/, "").trim();
+    if (!line) {
+      // Blank line ends a user-agent group
+      inUniversalGroup = false;
+      continue;
+    }
+
+    const userAgentMatch = line.match(/^User-agent:\s*(.+)$/i);
+    if (userAgentMatch) {
+      const ua = userAgentMatch[1].trim();
+      inUniversalGroup = ua === "*";
+      continue;
+    }
+
+    if (inUniversalGroup) {
+      const disallowMatch = line.match(/^Disallow:\s*(.*)$/i);
+      if (disallowMatch) {
+        const path = disallowMatch[1].trim();
+        // Empty Disallow means "allow all" — skip
+        if (path) rules.push(path);
+      }
+    }
+  }
+
+  return rules;
+}
+
+// Check if a URL path matches any Disallow rule (basic glob: * wildcard, $ end anchor)
+function isDisallowed(
+  pathname: string,
+  rules: string[]
+): { blocked: boolean; rule?: string } {
+  for (const rule of rules) {
+    // Convert robots.txt pattern to regex
+    // * = match anything, $ = end of string, everything else literal
+    const escaped = rule
+      .replace(/[.+?^{}()|[\]\\]/g, "\\$&") // escape regex special chars
+      .replace(/\*/g, ".*"); // * wildcard
+    const pattern = escaped.endsWith("$")
+      ? `^${escaped.slice(0, -2)}\\$`.replace(/\\\$$/, "$")
+      : `^${escaped}`;
+
+    try {
+      const re = new RegExp(pattern);
+      if (re.test(pathname)) {
+        return { blocked: true, rule };
+      }
+    } catch {
+      // Invalid regex, skip
+    }
+  }
+  return { blocked: false };
 }
 
 function normalizeUrl(url: string): string {
@@ -42,6 +106,7 @@ interface SitemapInfo {
 interface DiscoverResult {
   pages: string[];
   sitemapInfo: SitemapInfo;
+  robotsDisallowRules: string[];
 }
 
 async function fetchSitemapUrls(
@@ -158,8 +223,9 @@ async function discoverPages(baseUrl: string): Promise<DiscoverResult> {
     robotsSitemapBroken: false,
   };
 
-  // Step 1: Check robots.txt for sitemap declaration
+  // Step 1: Check robots.txt for sitemap declaration AND Disallow rules
   let robotsSitemapUrl = "";
+  let robotsDisallowRules: string[] = [];
   try {
     const robotsRes = await fetch(`${origin}/robots.txt`, {
       signal: AbortSignal.timeout(10000),
@@ -174,6 +240,7 @@ async function discoverPages(baseUrl: string): Promise<DiscoverResult> {
         robotsSitemapUrl = sitemapMatch[1].trim();
         sitemapInfo.robotsDeclaredSitemap = robotsSitemapUrl;
       }
+      robotsDisallowRules = parseRobotsDisallowRules(robotsTxt);
     }
   } catch {
     // robots.txt not available
@@ -281,10 +348,13 @@ async function discoverPages(baseUrl: string): Promise<DiscoverResult> {
     );
   });
 
-  return { pages: filtered.sort(), sitemapInfo };
+  return { pages: filtered.sort(), sitemapInfo, robotsDisallowRules };
 }
 
-async function checkPage(url: string): Promise<PageResult> {
+async function checkPage(
+  url: string,
+  disallowRules: string[] = []
+): Promise<PageResult> {
   try {
     const res = await fetch(url, {
       signal: AbortSignal.timeout(15000),
@@ -347,6 +417,10 @@ async function checkPage(url: string): Promise<PageResult> {
       canonicalStatus = "Wrong";
     }
 
+    // Check if this URL is blocked by robots.txt Disallow rules
+    const pathname = new URL(url).pathname;
+    const disallowCheck = isDisallowed(pathname, disallowRules);
+
     return {
       page: url,
       canonical: canonicalHref || "NONE",
@@ -357,8 +431,21 @@ async function checkPage(url: string): Promise<PageResult> {
       redirectTo: wasRedirected ? finalUrl : undefined,
       robots: robots || "(none)",
       indexable,
+      crawlable: disallowCheck.blocked ? "Disallowed" : "Allowed",
+      blockingRule: disallowCheck.rule,
     };
   } catch {
+    // Even on error, check disallow status from URL alone
+    let pathname = "";
+    try {
+      pathname = new URL(url).pathname;
+    } catch {
+      // ignore
+    }
+    const disallowCheck = pathname
+      ? isDisallowed(pathname, disallowRules)
+      : { blocked: false, rule: undefined as string | undefined };
+
     return {
       page: url,
       canonical: "ERROR",
@@ -368,6 +455,8 @@ async function checkPage(url: string): Promise<PageResult> {
       metaDescription: "",
       robots: "",
       indexable: "Unknown",
+      crawlable: disallowCheck.blocked ? "Disallowed" : "Allowed",
+      blockingRule: disallowCheck.rule,
     };
   }
 }
@@ -492,7 +581,8 @@ export async function POST(request: NextRequest) {
           )
         );
 
-        const { pages, sitemapInfo } = await discoverPages(baseUrl);
+        const { pages, sitemapInfo, robotsDisallowRules } =
+          await discoverPages(baseUrl);
 
         controller.enqueue(
           encoder.encode(
@@ -508,7 +598,7 @@ export async function POST(request: NextRequest) {
 
         // Check each page with a small delay
         for (let i = 0; i < pages.length; i++) {
-          const result = await checkPage(pages[i]);
+          const result = await checkPage(pages[i], robotsDisallowRules);
 
           controller.enqueue(
             encoder.encode(

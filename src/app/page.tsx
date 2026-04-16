@@ -12,6 +12,8 @@ interface PageResult {
   redirectTo?: string;
   robots: string;
   indexable: "Indexable" | "Noindex" | "Unknown";
+  crawlable: "Allowed" | "Disallowed";
+  blockingRule?: string;
 }
 
 interface WwwStatus {
@@ -149,6 +151,8 @@ export default function Home() {
       "HTTP Status",
       "Indexable",
       "Robots Meta",
+      "Crawlable",
+      "Blocking Rule",
       "Meta Title",
       "Meta Description",
     ];
@@ -161,6 +165,8 @@ export default function Home() {
       r.httpStatus,
       r.indexable,
       `"${(r.robots || "").replace(/"/g, '""')}"`,
+      r.crawlable,
+      r.blockingRule || "",
       `"${r.metaTitle.replace(/"/g, '""')}"`,
       `"${r.metaDescription.replace(/"/g, '""')}"`,
     ]);
@@ -310,6 +316,9 @@ export default function Home() {
     (r) => r.canonicalStatus === "Redirect"
   ).length;
   const noindexCount = results.filter((r) => r.indexable === "Noindex").length;
+  const disallowedCount = results.filter(
+    (r) => r.crawlable === "Disallowed"
+  ).length;
 
   // Exclude from duplicate detection:
   // 1. Redirecting pages — they share meta with their target by design
@@ -677,6 +686,54 @@ export default function Home() {
             </button>
           </div>
 
+          {/* Disallowed (robots.txt) Pages Warning */}
+          {disallowedCount > 0 && (
+            <div className="bg-orange-950/30 border border-orange-900/50 rounded-lg p-4 mb-6">
+              <div className="flex items-start gap-3">
+                <svg
+                  className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+                  />
+                </svg>
+                <div>
+                  <div className="text-orange-400 font-medium mb-1">
+                    {disallowedCount} page{disallowedCount > 1 ? "s" : ""} blocked by robots.txt
+                  </div>
+                  <div className="text-orange-300/80 text-sm">
+                    These pages are blocked from being crawled by Google via robots.txt Disallow rules. Note: blocked pages can still appear in search results if linked from elsewhere — to fully prevent indexing, use a noindex meta tag (and don&apos;t block via robots.txt).
+                  </div>
+                  <ul className="text-orange-300/80 text-sm mt-2 space-y-0.5">
+                    {results
+                      .filter((r) => r.crawlable === "Disallowed")
+                      .map((r) => (
+                        <li key={r.page}>
+                          <a
+                            href={r.page}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-orange-300 hover:text-orange-200 hover:underline"
+                          >
+                            {new URL(r.page).pathname || "/"}
+                          </a>
+                          <span className="text-orange-400/60 ml-2 text-xs">
+                            (rule: Disallow: {r.blockingRule})
+                          </span>
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Noindex Pages Warning */}
           {noindexCount > 0 && (
             <div className="bg-red-950/30 border border-red-900/50 rounded-lg p-4 mb-6">
@@ -904,6 +961,7 @@ export default function Home() {
                   <th className="text-left px-4 py-3 font-medium">Status</th>
                   <th className="text-left px-4 py-3 font-medium">HTTP</th>
                   <th className="text-left px-4 py-3 font-medium">Indexable</th>
+                  <th className="text-left px-4 py-3 font-medium">Crawlable</th>
                   <th className="text-left px-4 py-3 font-medium">
                     Meta Title
                   </th>
@@ -971,6 +1029,22 @@ export default function Home() {
                         title={r.robots || "No robots meta tag"}
                       >
                         {r.indexable}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                          r.crawlable === "Allowed"
+                            ? "bg-green-900/50 text-green-400"
+                            : "bg-orange-900/50 text-orange-400"
+                        }`}
+                        title={
+                          r.blockingRule
+                            ? `Blocked by rule: Disallow: ${r.blockingRule}`
+                            : "Allowed by robots.txt"
+                        }
+                      >
+                        {r.crawlable}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-slate-300 max-w-[200px]">
