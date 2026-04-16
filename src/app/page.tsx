@@ -165,6 +165,32 @@ export default function Home() {
     (r) => r.canonicalStatus === "Missing"
   ).length;
 
+  // Find duplicate meta titles
+  const titleMap = new Map<string, string[]>();
+  results.forEach((r) => {
+    if (r.metaTitle) {
+      const existing = titleMap.get(r.metaTitle) || [];
+      existing.push(r.page);
+      titleMap.set(r.metaTitle, existing);
+    }
+  });
+  const duplicateTitles = [...titleMap.entries()].filter(
+    ([, pages]) => pages.length > 1
+  );
+
+  // Find duplicate meta descriptions
+  const descMap = new Map<string, string[]>();
+  results.forEach((r) => {
+    if (r.metaDescription) {
+      const existing = descMap.get(r.metaDescription) || [];
+      existing.push(r.page);
+      descMap.set(r.metaDescription, existing);
+    }
+  });
+  const duplicateDescs = [...descMap.entries()].filter(
+    ([, pages]) => pages.length > 1
+  );
+
   return (
     <main className="max-w-[1400px] mx-auto px-4 py-8">
       {/* Header */}
@@ -390,6 +416,103 @@ export default function Home() {
               <div className="text-slate-400 text-sm">Missing</div>
             </button>
           </div>
+
+          {/* Duplicate Meta Tags Panel */}
+          {(duplicateTitles.length > 0 || duplicateDescs.length > 0) && (
+            <div className="bg-slate-800 rounded-lg p-5 mb-6 border border-slate-700">
+              <h2 className="text-lg font-semibold text-white mb-3">
+                Duplicate Meta Tags
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Duplicate Titles */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span
+                      className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                        duplicateTitles.length > 0
+                          ? "bg-red-900/50 text-red-400"
+                          : "bg-green-900/50 text-green-400"
+                      }`}
+                    >
+                      {duplicateTitles.length > 0
+                        ? `${duplicateTitles.length} duplicate title${duplicateTitles.length > 1 ? "s" : ""}`
+                        : "No duplicates"}
+                    </span>
+                    <span className="text-sm text-slate-400">Meta Titles</span>
+                  </div>
+                  {duplicateTitles.length > 0 && (
+                    <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                      {duplicateTitles.map(([title, pages]) => (
+                        <div
+                          key={title}
+                          className="bg-slate-900/50 rounded p-3"
+                        >
+                          <div className="text-sm text-red-400 font-medium mb-1 truncate" title={title}>
+                            &quot;{title}&quot;
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            Used on {pages.length} pages:
+                          </div>
+                          <ul className="text-xs text-slate-500 mt-1 space-y-0.5">
+                            {pages.map((p) => (
+                              <li key={p} className="truncate">
+                                {new URL(p).pathname || "/"}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Duplicate Descriptions */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span
+                      className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                        duplicateDescs.length > 0
+                          ? "bg-red-900/50 text-red-400"
+                          : "bg-green-900/50 text-green-400"
+                      }`}
+                    >
+                      {duplicateDescs.length > 0
+                        ? `${duplicateDescs.length} duplicate description${duplicateDescs.length > 1 ? "s" : ""}`
+                        : "No duplicates"}
+                    </span>
+                    <span className="text-sm text-slate-400">
+                      Meta Descriptions
+                    </span>
+                  </div>
+                  {duplicateDescs.length > 0 && (
+                    <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                      {duplicateDescs.map(([desc, pages]) => (
+                        <div
+                          key={desc}
+                          className="bg-slate-900/50 rounded p-3"
+                        >
+                          <div className="text-sm text-red-400 font-medium mb-1 truncate" title={desc}>
+                            &quot;{desc.slice(0, 80)}
+                            {desc.length > 80 ? "..." : ""}&quot;
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            Used on {pages.length} pages:
+                          </div>
+                          <ul className="text-xs text-slate-500 mt-1 space-y-0.5">
+                            {pages.map((p) => (
+                              <li key={p} className="truncate">
+                                {new URL(p).pathname || "/"}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Export Button */}
           <div className="flex justify-end mb-4">
