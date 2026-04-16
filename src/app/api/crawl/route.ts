@@ -419,7 +419,7 @@ export async function POST(request: NextRequest) {
     const parsed = new URL(
       url.startsWith("http") ? url : `https://${url}`
     );
-    baseUrl = parsed.origin + parsed.pathname;
+    baseUrl = parsed.origin + parsed.pathname.replace(/\/+$/, "");
   } catch {
     return new Response(JSON.stringify({ error: "Invalid URL" }), {
       status: 400,
