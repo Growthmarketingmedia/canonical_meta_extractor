@@ -165,12 +165,16 @@ export default function Home() {
     (r) => r.canonicalStatus === "Missing"
   ).length;
 
-  // Find duplicate meta titles
+  // Find duplicate meta titles (dedupe by pathname to avoid www/non-www false positives)
   const titleMap = new Map<string, string[]>();
   results.forEach((r) => {
     if (r.metaTitle) {
+      const path = new URL(r.page).pathname || "/";
       const existing = titleMap.get(r.metaTitle) || [];
-      existing.push(r.page);
+      // Only add if this pathname isn't already tracked for this title
+      if (!existing.some((p) => new URL(p).pathname === path)) {
+        existing.push(r.page);
+      }
       titleMap.set(r.metaTitle, existing);
     }
   });
@@ -178,12 +182,15 @@ export default function Home() {
     ([, pages]) => pages.length > 1
   );
 
-  // Find duplicate meta descriptions
+  // Find duplicate meta descriptions (dedupe by pathname)
   const descMap = new Map<string, string[]>();
   results.forEach((r) => {
     if (r.metaDescription) {
+      const path = new URL(r.page).pathname || "/";
       const existing = descMap.get(r.metaDescription) || [];
-      existing.push(r.page);
+      if (!existing.some((p) => new URL(p).pathname === path)) {
+        existing.push(r.page);
+      }
       descMap.set(r.metaDescription, existing);
     }
   });

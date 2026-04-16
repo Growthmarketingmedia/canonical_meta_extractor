@@ -81,8 +81,23 @@ async function discoverPages(baseUrl: string): Promise<string[]> {
   // Ensure base URL is included
   pages.add(origin);
 
+  // Deduplicate by pathname (handles www vs non-www, trailing slashes)
+  const seenPaths = new Map<string, string>();
+  for (const url of pages) {
+    try {
+      const u = new URL(url);
+      const path = u.pathname.replace(/\/+$/, "") || "/";
+      // Keep the first URL we see for each path
+      if (!seenPaths.has(path)) {
+        seenPaths.set(path, url);
+      }
+    } catch {
+      // skip invalid
+    }
+  }
+
   // Filter out non-page URLs (sitemaps, XML files, feeds)
-  const filtered = [...pages].filter((url) => {
+  const filtered = [...seenPaths.values()].filter((url) => {
     const path = new URL(url).pathname.toLowerCase();
     return (
       !path.endsWith(".xml") &&
