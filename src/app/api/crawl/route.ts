@@ -451,6 +451,32 @@ async function checkPage(
         // keep raw if URL parsing fails
       }
 
+      // Detect image optimization URLs (Next.js /_next/image, Vercel /image, etc.)
+      // and decode the actual image source from the `url` query parameter.
+      try {
+        const parsed = new URL(absoluteSrc);
+        if (parsed.searchParams.has("url")) {
+          const path = parsed.pathname.toLowerCase();
+          // Common image optimization endpoints
+          if (
+            path.endsWith("/_next/image") ||
+            path.endsWith("/image") ||
+            path.includes("/_vercel/image")
+          ) {
+            const innerUrl = parsed.searchParams.get("url");
+            if (innerUrl) {
+              try {
+                absoluteSrc = new URL(innerUrl, url).href;
+              } catch {
+                absoluteSrc = innerUrl;
+              }
+            }
+          }
+        }
+      } catch {
+        // ignore — keep absoluteSrc as-is
+      }
+
       // Dedupe by src
       if (seenSrcs.has(absoluteSrc)) return;
       seenSrcs.add(absoluteSrc);
