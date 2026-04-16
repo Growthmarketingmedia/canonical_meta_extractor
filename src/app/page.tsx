@@ -304,10 +304,14 @@ export default function Home() {
     (r) => r.canonicalStatus === "Redirect"
   ).length;
 
-  // Exclude redirecting pages from duplicate detection —
-  // they share meta with their target by design, not a real duplicate.
+  // Exclude from duplicate detection:
+  // 1. Redirecting pages — they share meta with their target by design
+  // 2. Non-200 pages (404s, errors) — they serve the error template, not real content
   const dedupeResults = results.filter(
-    (r) => r.canonicalStatus !== "Redirect"
+    (r) =>
+      r.canonicalStatus !== "Redirect" &&
+      r.httpStatus >= 200 &&
+      r.httpStatus < 300
   );
 
   // Find duplicate meta titles (dedupe by pathname to avoid www/non-www false positives)
