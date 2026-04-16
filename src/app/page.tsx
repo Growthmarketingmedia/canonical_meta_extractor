@@ -21,6 +21,14 @@ interface WwwStatus {
   nonWwwUrl: string;
 }
 
+interface SitemapInfo {
+  found: boolean;
+  totalUrls: number;
+  urlsWithWww: number;
+  urlsWithoutWww: number;
+  sampleUrls: string[];
+}
+
 export default function Home() {
   const [url, setUrl] = useState("");
   const [results, setResults] = useState<PageResult[]>([]);
@@ -32,6 +40,7 @@ export default function Home() {
     "all" | "Correct" | "Wrong" | "Missing"
   >("all");
   const [wwwStatus, setWwwStatus] = useState<WwwStatus | null>(null);
+  const [sitemapInfo, setSitemapInfo] = useState<SitemapInfo | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -45,6 +54,7 @@ export default function Home() {
     setStatusMessage("Connecting...");
     setFilter("all");
     setWwwStatus(null);
+    setSitemapInfo(null);
 
     abortRef.current = new AbortController();
 
@@ -80,6 +90,8 @@ export default function Home() {
             setStatusMessage(data.message);
           } else if (data.type === "wwwStatus") {
             setWwwStatus(data);
+          } else if (data.type === "sitemapInfo") {
+            setSitemapInfo(data.sitemapInfo);
           } else if (data.type === "total") {
             setTotal(data.total);
             setStatusMessage(`Checking ${data.total} pages...`);
@@ -266,7 +278,7 @@ export default function Home() {
           <h2 className="text-lg font-semibold text-white mb-3">
             WWW vs Non-WWW Analysis
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Site serves on */}
             <div className="bg-slate-900/50 rounded-lg p-4">
               <div className="text-sm text-slate-400 mb-1">Site serves on</div>
@@ -360,6 +372,62 @@ export default function Home() {
                       </div>
                     )}
                 </div>
+              </div>
+            )}
+
+            {/* Sitemap URL format */}
+            {sitemapInfo && (
+              <div className="bg-slate-900/50 rounded-lg p-4">
+                <div className="text-sm text-slate-400 mb-1">
+                  Sitemap URLs
+                </div>
+                {!sitemapInfo.found ? (
+                  <div className="text-yellow-400 text-sm">
+                    No sitemap.xml found
+                  </div>
+                ) : (
+                  <div className="text-white text-sm space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-blue-400 font-medium">
+                        {sitemapInfo.urlsWithWww}
+                      </span>
+                      <span>use www</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-blue-400 font-medium">
+                        {sitemapInfo.urlsWithoutWww}
+                      </span>
+                      <span>use non-www</span>
+                    </div>
+                    {wwwStatus.siteVersion === "www" &&
+                      sitemapInfo.urlsWithoutWww > 0 && (
+                        <div className="text-red-400 text-xs mt-1 font-medium">
+                          Site uses www but sitemap has non-www URLs
+                        </div>
+                      )}
+                    {wwwStatus.siteVersion === "non-www" &&
+                      sitemapInfo.urlsWithWww > 0 && (
+                        <div className="text-red-400 text-xs mt-1 font-medium">
+                          Site uses non-www but sitemap has www URLs
+                        </div>
+                      )}
+                    {sitemapInfo.urlsWithWww > 0 &&
+                      sitemapInfo.urlsWithoutWww > 0 && (
+                        <div className="text-yellow-400 text-xs mt-1">
+                          Mixed www/non-www in sitemap
+                        </div>
+                      )}
+                    {wwwStatus.siteVersion !== "unknown" &&
+                      ((wwwStatus.siteVersion === "www" &&
+                        sitemapInfo.urlsWithoutWww === 0) ||
+                        (wwwStatus.siteVersion === "non-www" &&
+                          sitemapInfo.urlsWithWww === 0)) && (
+                        <div className="text-green-400 text-xs mt-1">
+                          Sitemap matches site preference
+                        </div>
+                      )}
+                  </div>
+                )}
               </div>
             )}
           </div>

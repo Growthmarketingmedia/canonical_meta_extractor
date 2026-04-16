@@ -23,9 +23,27 @@ function normalizeUrl(url: string): string {
   }
 }
 
-async function discoverPages(baseUrl: string): Promise<string[]> {
+interface DiscoverResult {
+  pages: string[];
+  sitemapInfo: {
+    found: boolean;
+    totalUrls: number;
+    urlsWithWww: number;
+    urlsWithoutWww: number;
+    sampleUrls: string[];
+  };
+}
+
+async function discoverPages(baseUrl: string): Promise<DiscoverResult> {
   const pages = new Set<string>();
   const origin = new URL(baseUrl).origin;
+  const sitemapInfo = {
+    found: false,
+    totalUrls: 0,
+    urlsWithWww: 0,
+    urlsWithoutWww: 0,
+    sampleUrls: [] as string[],
+  };
 
   // Try sitemap.xml first
   try {
@@ -33,11 +51,23 @@ async function discoverPages(baseUrl: string): Promise<string[]> {
       signal: AbortSignal.timeout(10000),
     });
     if (sitemapRes.ok) {
+      sitemapInfo.found = true;
       const xml = await sitemapRes.text();
       const $ = cheerio.load(xml, { xmlMode: true });
       $("loc").each((_, el) => {
         const loc = $(el).text().trim();
-        if (loc) pages.add(loc);
+        if (loc) {
+          pages.add(loc);
+          sitemapInfo.totalUrls++;
+          if (loc.includes("://www.")) {
+            sitemapInfo.urlsWithWww++;
+          } else {
+            sitemapInfo.urlsWithoutWww++;
+          }
+          if (sitemapInfo.sampleUrls.length < 3) {
+            sitemapInfo.sampleUrls.push(loc);
+          }
+        }
       });
     }
   } catch {
@@ -108,7 +138,7 @@ async function discoverPages(baseUrl: string): Promise<string[]> {
     );
   });
 
-  return filtered.sort();
+  return { pages: filtered.sort(), sitemapInfo };
 }
 
 async function checkPage(url: string): Promise<PageResult> {
@@ -282,7 +312,13 @@ export async function POST(request: NextRequest) {
           )
         );
 
-        const pages = await discoverPages(baseUrl);
+        const { pages, sitemapInfo } = await discoverPages(baseUrl);
+
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({ type: "sitemapInfo", sitemapInfo })}\n\n`
+          )
+        );
 
         controller.enqueue(
           encoder.encode(
