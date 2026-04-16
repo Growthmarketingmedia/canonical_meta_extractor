@@ -1,6 +1,12 @@
 import { NextRequest } from "next/server";
 import * as cheerio from "cheerio";
 
+interface ImageInfo {
+  src: string;
+  alt: string;
+  hasAlt: boolean;
+}
+
 interface PageResult {
   page: string;
   canonical: string;
@@ -13,6 +19,8 @@ interface PageResult {
   indexable: "Indexable" | "Noindex" | "Unknown";
   crawlable: "Allowed" | "Disallowed";
   blockingRule?: string;
+  images: ImageInfo[];
+  imagesMissingAlt: number;
 }
 
 // Parse robots.txt and return Disallow rules that apply to the universal user-agent (*)
@@ -421,6 +429,43 @@ async function checkPage(
     const pathname = new URL(url).pathname;
     const disallowCheck = isDisallowed(pathname, disallowRules);
 
+    // Extract all <img> tags
+    const images: ImageInfo[] = [];
+    const seenSrcs = new Set<string>();
+    $("img").each((_, el) => {
+      const $img = $(el);
+      const rawSrc =
+        $img.attr("src") ||
+        $img.attr("data-src") ||
+        $img.attr("data-lazy-src") ||
+        "";
+      if (!rawSrc) return;
+      // Skip data URIs and tiny placeholder/tracking pixels
+      if (rawSrc.startsWith("data:")) return;
+
+      // Resolve relative URLs
+      let absoluteSrc = rawSrc;
+      try {
+        absoluteSrc = new URL(rawSrc, url).href;
+      } catch {
+        // keep raw if URL parsing fails
+      }
+
+      // Dedupe by src
+      if (seenSrcs.has(absoluteSrc)) return;
+      seenSrcs.add(absoluteSrc);
+
+      // Alt attribute: must exist (even empty alt="" is valid for decorative images)
+      // hasAlt is false ONLY if the attribute is missing entirely
+      const altAttr = $img.attr("alt");
+      const hasAlt = altAttr !== undefined;
+      const alt = (altAttr || "").trim();
+
+      images.push({ src: absoluteSrc, alt, hasAlt });
+    });
+
+    const imagesMissingAlt = images.filter((img) => !img.hasAlt).length;
+
     return {
       page: url,
       canonical: canonicalHref || "NONE",
@@ -433,6 +478,8 @@ async function checkPage(
       indexable,
       crawlable: disallowCheck.blocked ? "Disallowed" : "Allowed",
       blockingRule: disallowCheck.rule,
+      images,
+      imagesMissingAlt,
     };
   } catch {
     // Even on error, check disallow status from URL alone
@@ -457,6 +504,8 @@ async function checkPage(
       indexable: "Unknown",
       crawlable: disallowCheck.blocked ? "Disallowed" : "Allowed",
       blockingRule: disallowCheck.rule,
+      images: [],
+      imagesMissingAlt: 0,
     };
   }
 }

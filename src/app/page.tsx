@@ -1,6 +1,12 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, Fragment } from "react";
+
+interface ImageInfo {
+  src: string;
+  alt: string;
+  hasAlt: boolean;
+}
 
 interface PageResult {
   page: string;
@@ -14,6 +20,8 @@ interface PageResult {
   indexable: "Indexable" | "Noindex" | "Unknown";
   crawlable: "Allowed" | "Disallowed";
   blockingRule?: string;
+  images: ImageInfo[];
+  imagesMissingAlt: number;
 }
 
 interface WwwStatus {
@@ -51,6 +59,19 @@ export default function Home() {
   >("all");
   const [wwwStatus, setWwwStatus] = useState<WwwStatus | null>(null);
   const [sitemapInfo, setSitemapInfo] = useState<SitemapInfo | null>(null);
+  const [expandedImages, setExpandedImages] = useState<Set<string>>(new Set());
+
+  const toggleImagesRow = (pageUrl: string) => {
+    setExpandedImages((prev) => {
+      const next = new Set(prev);
+      if (next.has(pageUrl)) {
+        next.delete(pageUrl);
+      } else {
+        next.add(pageUrl);
+      }
+      return next;
+    });
+  };
   const abortRef = useRef<AbortController | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -153,6 +174,8 @@ export default function Home() {
       "Robots Meta",
       "Crawlable",
       "Blocking Rule",
+      "Total Images",
+      "Images Missing Alt",
       "Meta Title",
       "Meta Description",
     ];
@@ -167,6 +190,8 @@ export default function Home() {
       `"${(r.robots || "").replace(/"/g, '""')}"`,
       r.crawlable,
       r.blockingRule || "",
+      r.images?.length || 0,
+      r.imagesMissingAlt || 0,
       `"${r.metaTitle.replace(/"/g, '""')}"`,
       `"${r.metaDescription.replace(/"/g, '""')}"`,
     ]);
@@ -318,6 +343,17 @@ export default function Home() {
   const noindexCount = results.filter((r) => r.indexable === "Noindex").length;
   const disallowedCount = results.filter(
     (r) => r.crawlable === "Disallowed"
+  ).length;
+  const totalImages = results.reduce(
+    (sum, r) => sum + (r.images?.length || 0),
+    0
+  );
+  const totalImagesMissingAlt = results.reduce(
+    (sum, r) => sum + (r.imagesMissingAlt || 0),
+    0
+  );
+  const pagesWithMissingAlt = results.filter(
+    (r) => (r.imagesMissingAlt || 0) > 0
   ).length;
 
   // Exclude from duplicate detection:
@@ -686,6 +722,35 @@ export default function Home() {
             </button>
           </div>
 
+          {/* Image Alt Tag Summary */}
+          {totalImagesMissingAlt > 0 && (
+            <div className="bg-yellow-950/30 border border-yellow-900/50 rounded-lg p-4 mb-6">
+              <div className="flex items-start gap-3">
+                <svg
+                  className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                  />
+                </svg>
+                <div>
+                  <div className="text-yellow-400 font-medium mb-1">
+                    {totalImagesMissingAlt} image{totalImagesMissingAlt > 1 ? "s" : ""} missing alt text across {pagesWithMissingAlt} page{pagesWithMissingAlt > 1 ? "s" : ""}
+                  </div>
+                  <div className="text-yellow-300/80 text-sm">
+                    Out of {totalImages} total images. Alt text is critical for accessibility (screen readers) and SEO (image search). Click any page&apos;s image count below to see the full list of images and their alt status.
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Disallowed (robots.txt) Pages Warning */}
           {disallowedCount > 0 && (
             <div className="bg-orange-950/30 border border-orange-900/50 rounded-lg p-4 mb-6">
@@ -962,6 +1027,7 @@ export default function Home() {
                   <th className="text-left px-4 py-3 font-medium">HTTP</th>
                   <th className="text-left px-4 py-3 font-medium">Indexable</th>
                   <th className="text-left px-4 py-3 font-medium">Crawlable</th>
+                  <th className="text-left px-4 py-3 font-medium">Images</th>
                   <th className="text-left px-4 py-3 font-medium">
                     Meta Title
                   </th>
@@ -972,8 +1038,8 @@ export default function Home() {
               </thead>
               <tbody>
                 {filteredResults.map((r, i) => (
+                  <Fragment key={r.page}>
                   <tr
-                    key={r.page}
                     className="border-t border-slate-700 hover:bg-slate-800/50"
                   >
                     <td className="px-4 py-3 text-slate-400">{i + 1}</td>
@@ -1047,6 +1113,43 @@ export default function Home() {
                         {r.crawlable}
                       </span>
                     </td>
+                    <td className="px-4 py-3">
+                      {r.images && r.images.length > 0 ? (
+                        <button
+                          onClick={() => toggleImagesRow(r.page)}
+                          className="flex items-center gap-2 text-sm hover:text-blue-300 transition-colors"
+                        >
+                          <svg
+                            className={`w-3 h-3 transition-transform ${
+                              expandedImages.has(r.page) ? "rotate-90" : ""
+                            }`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9 5l7 7-7 7"
+                            />
+                          </svg>
+                          <span className="text-slate-300">{r.images.length}</span>
+                          {r.imagesMissingAlt > 0 && (
+                            <span className="inline-block px-1.5 py-0.5 rounded text-xs bg-red-900/50 text-red-400">
+                              {r.imagesMissingAlt} no alt
+                            </span>
+                          )}
+                          {r.imagesMissingAlt === 0 && r.images.length > 0 && (
+                            <span className="inline-block px-1.5 py-0.5 rounded text-xs bg-green-900/50 text-green-400">
+                              all alt
+                            </span>
+                          )}
+                        </button>
+                      ) : (
+                        <span className="text-slate-500 text-xs">0</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-slate-300 max-w-[200px]">
                       <div className="truncate" title={r.metaTitle}>
                         {r.metaTitle || (
@@ -1062,6 +1165,74 @@ export default function Home() {
                       </div>
                     </td>
                   </tr>
+                  {expandedImages.has(r.page) && r.images && r.images.length > 0 && (
+                    <tr className="bg-slate-900/40">
+                      <td colSpan={11} className="px-4 py-3">
+                        <div className="text-xs text-slate-400 mb-2">
+                          Images on{" "}
+                          <span className="text-slate-300">
+                            {new URL(r.page).pathname || "/"}
+                          </span>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="text-slate-500 border-b border-slate-700">
+                                <th className="text-left px-2 py-1 font-medium">#</th>
+                                <th className="text-left px-2 py-1 font-medium">Image Source</th>
+                                <th className="text-left px-2 py-1 font-medium">Alt Text</th>
+                                <th className="text-left px-2 py-1 font-medium">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {r.images.map((img, imgIdx) => (
+                                <tr key={img.src} className="border-t border-slate-800/50">
+                                  <td className="px-2 py-1.5 text-slate-500">{imgIdx + 1}</td>
+                                  <td className="px-2 py-1.5 max-w-[400px]">
+                                    <a
+                                      href={img.src}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-400 hover:underline break-all"
+                                    >
+                                      {img.src.split("/").pop() || img.src}
+                                    </a>
+                                  </td>
+                                  <td className="px-2 py-1.5 text-slate-300 max-w-[300px]">
+                                    {img.hasAlt ? (
+                                      img.alt ? (
+                                        <span className="truncate block" title={img.alt}>
+                                          &quot;{img.alt}&quot;
+                                        </span>
+                                      ) : (
+                                        <span className="text-slate-500 italic">
+                                          (empty alt - decorative)
+                                        </span>
+                                      )
+                                    ) : (
+                                      <span className="text-red-400 italic">No alt attribute</span>
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-1.5">
+                                    <span
+                                      className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium ${
+                                        img.hasAlt
+                                          ? "bg-green-900/50 text-green-400"
+                                          : "bg-red-900/50 text-red-400"
+                                      }`}
+                                    >
+                                      {img.hasAlt ? "OK" : "Missing"}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
