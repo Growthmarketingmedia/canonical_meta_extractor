@@ -4,10 +4,11 @@ import * as cheerio from "cheerio";
 interface PageResult {
   page: string;
   canonical: string;
-  canonicalStatus: "Correct" | "Wrong" | "Missing";
+  canonicalStatus: "Correct" | "Wrong" | "Missing" | "Redirect";
   httpStatus: number;
   metaTitle: string;
   metaDescription: string;
+  redirectTo?: string;
 }
 
 function normalizeUrl(url: string): string {
@@ -288,6 +289,12 @@ async function checkPage(url: string): Promise<PageResult> {
       redirect: "follow",
     });
 
+    // Check if the page redirected to a different URL
+    // res.url is the final URL after following redirects
+    const finalUrl = res.url;
+    const wasRedirected =
+      normalizeUrl(finalUrl) !== normalizeUrl(url);
+
     const html = await res.text();
     const $ = cheerio.load(html);
 
@@ -304,7 +311,9 @@ async function checkPage(url: string): Promise<PageResult> {
 
     // Determine canonical status
     let canonicalStatus: PageResult["canonicalStatus"];
-    if (!canonicalHref) {
+    if (wasRedirected) {
+      canonicalStatus = "Redirect";
+    } else if (!canonicalHref) {
       canonicalStatus = "Missing";
     } else if (normalizeUrl(canonicalHref) === normalizeUrl(url)) {
       canonicalStatus = "Correct";
@@ -319,6 +328,7 @@ async function checkPage(url: string): Promise<PageResult> {
       httpStatus: res.status,
       metaTitle,
       metaDescription,
+      redirectTo: wasRedirected ? finalUrl : undefined,
     };
   } catch {
     return {

@@ -5,10 +5,11 @@ import { useState, useRef } from "react";
 interface PageResult {
   page: string;
   canonical: string;
-  canonicalStatus: "Correct" | "Wrong" | "Missing";
+  canonicalStatus: "Correct" | "Wrong" | "Missing" | "Redirect";
   httpStatus: number;
   metaTitle: string;
   metaDescription: string;
+  redirectTo?: string;
 }
 
 interface WwwStatus {
@@ -42,7 +43,7 @@ export default function Home() {
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState("");
   const [filter, setFilter] = useState<
-    "all" | "Correct" | "Wrong" | "Missing"
+    "all" | "Correct" | "Wrong" | "Missing" | "Redirect"
   >("all");
   const [wwwStatus, setWwwStatus] = useState<WwwStatus | null>(null);
   const [sitemapInfo, setSitemapInfo] = useState<SitemapInfo | null>(null);
@@ -141,6 +142,7 @@ export default function Home() {
       "Page URL",
       "Canonical URL",
       "Canonical Status",
+      "Redirects To",
       "Canonical Uses WWW",
       "HTTP Status",
       "Meta Title",
@@ -150,6 +152,7 @@ export default function Home() {
       r.page,
       r.canonical,
       r.canonicalStatus,
+      r.redirectTo || "",
       r.canonical.includes("://www.") ? "Yes" : "No",
       r.httpStatus,
       `"${r.metaTitle.replace(/"/g, '""')}"`,
@@ -296,6 +299,9 @@ export default function Home() {
   ).length;
   const missingCount = results.filter(
     (r) => r.canonicalStatus === "Missing"
+  ).length;
+  const redirectCount = results.filter(
+    (r) => r.canonicalStatus === "Redirect"
   ).length;
 
   // Find duplicate meta titles (dedupe by pathname to avoid www/non-www false positives)
@@ -586,7 +592,7 @@ export default function Home() {
       {/* Summary Stats */}
       {results.length > 0 && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
             <button
               className={`bg-slate-800 rounded-lg p-4 text-center border-2 transition-colors ${
                 filter === "all"
@@ -638,6 +644,19 @@ export default function Home() {
                 {missingCount}
               </div>
               <div className="text-slate-400 text-sm">Missing</div>
+            </button>
+            <button
+              className={`bg-slate-800 rounded-lg p-4 text-center border-2 transition-colors ${
+                filter === "Redirect"
+                  ? "border-purple-500"
+                  : "border-transparent hover:border-slate-600"
+              }`}
+              onClick={() => setFilter("Redirect")}
+            >
+              <div className="text-2xl font-bold text-purple-400">
+                {redirectCount}
+              </div>
+              <div className="text-slate-400 text-sm">Redirect</div>
             </button>
           </div>
 
@@ -831,7 +850,18 @@ export default function Home() {
                       </a>
                     </td>
                     <td className="px-4 py-3 text-slate-300 break-all max-w-[250px]">
-                      {r.canonical}
+                      {r.canonicalStatus === "Redirect" && r.redirectTo ? (
+                        <div className="text-xs">
+                          <div className="text-purple-400 mb-1">
+                            → {new URL(r.redirectTo).pathname || "/"}
+                          </div>
+                          <div className="text-slate-500">
+                            Canonical: {r.canonical}
+                          </div>
+                        </div>
+                      ) : (
+                        r.canonical
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span
@@ -840,7 +870,9 @@ export default function Home() {
                             ? "bg-green-900/50 text-green-400"
                             : r.canonicalStatus === "Wrong"
                               ? "bg-red-900/50 text-red-400"
-                              : "bg-yellow-900/50 text-yellow-400"
+                              : r.canonicalStatus === "Redirect"
+                                ? "bg-purple-900/50 text-purple-400"
+                                : "bg-yellow-900/50 text-yellow-400"
                         }`}
                       >
                         {r.canonicalStatus}
