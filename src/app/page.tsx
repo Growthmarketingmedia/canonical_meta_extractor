@@ -162,6 +162,122 @@ export default function Home() {
     link.click();
   };
 
+  const [promptCopied, setPromptCopied] = useState(false);
+
+  const generateFixPrompt = () => {
+    const domain = new URL(
+      url.startsWith("http") ? url : `https://${url}`
+    ).hostname;
+
+    const wrongPages = results.filter((r) => r.canonicalStatus === "Wrong");
+    const missingPages = results.filter((r) => r.canonicalStatus === "Missing");
+    const dupTitles = duplicateTitles;
+    const dupDescs = duplicateDescs;
+
+    const sitePreference = wwwStatus?.siteVersion || "unknown";
+    const sitemapMismatch =
+      sitemapInfo &&
+      wwwStatus &&
+      ((wwwStatus.siteVersion === "www" && sitemapInfo.urlsWithoutWww > 0) ||
+        (wwwStatus.siteVersion === "non-www" && sitemapInfo.urlsWithWww > 0));
+
+    let prompt = `# SEO Fix Instructions for ${domain}\n\n`;
+    prompt += `I've attached a CSV audit file (canonical-audit-${domain.replace("www.", "")}-${new Date().toISOString().slice(0, 10)}.csv) with full results. Please fix the following issues:\n\n`;
+
+    // Canonical issues
+    if (wrongPages.length > 0) {
+      prompt += `## 1. Fix Wrong Canonical Tags (${wrongPages.length} pages)\n\n`;
+      prompt += `${wrongPages.length} pages have their canonical tag pointing to the homepage instead of themselves. Each page must have a self-referencing canonical tag.\n\n`;
+      prompt += `**How to fix in Next.js:**\n`;
+      prompt += `In each page's metadata (or layout), set the canonical URL to match the page's own URL. Example:\n\n`;
+      prompt += `\`\`\`typescript\n`;
+      prompt += `// In app/[slug]/page.tsx or the relevant page file\n`;
+      prompt += `export async function generateMetadata({ params }) {\n`;
+      prompt += `  return {\n`;
+      prompt += `    alternates: {\n`;
+      prompt += `      canonical: \`https://${sitePreference === "www" ? "www." : ""}${domain.replace("www.", "")}/\${params.slug}\`,\n`;
+      prompt += `    },\n`;
+      prompt += `  };\n`;
+      prompt += `}\n`;
+      prompt += `\`\`\`\n\n`;
+      prompt += `**Pages affected (see CSV for full list):**\n`;
+      wrongPages.slice(0, 10).forEach((r) => {
+        prompt += `- ${new URL(r.page).pathname} → currently points to: ${r.canonical}\n`;
+      });
+      if (wrongPages.length > 10) {
+        prompt += `- ... and ${wrongPages.length - 10} more (see CSV)\n`;
+      }
+      prompt += `\n`;
+    }
+
+    // Missing canonicals
+    if (missingPages.length > 0) {
+      prompt += `## 2. Add Missing Canonical Tags (${missingPages.length} pages)\n\n`;
+      prompt += `These pages have no canonical tag at all. Add a self-referencing canonical to each:\n`;
+      missingPages.forEach((r) => {
+        prompt += `- ${new URL(r.page).pathname}\n`;
+      });
+      prompt += `\n`;
+    }
+
+    // WWW consistency
+    if (sitemapMismatch) {
+      const nextSection = wrongPages.length > 0 && missingPages.length > 0 ? "3" : wrongPages.length > 0 || missingPages.length > 0 ? "2" : "1";
+      prompt += `## ${nextSection}. Fix Sitemap URL Format Mismatch\n\n`;
+      prompt += `The site serves on **${sitePreference}** but the sitemap.xml contains **${sitePreference === "www" ? "non-www" : "www"}** URLs.\n`;
+      prompt += `Update the sitemap generation to use **${sitePreference === "www" ? "https://www." : "https://"}${domain.replace("www.", "")}** for all URLs.\n\n`;
+    }
+
+    // Canonical www mismatch
+    if (
+      wwwStatus &&
+      ((sitePreference === "www" && canonicalsWithoutWww > 0) ||
+        (sitePreference === "non-www" && canonicalsWithWww > 0))
+    ) {
+      prompt += `## Fix Canonical URL Format\n\n`;
+      prompt += `The site prefers **${sitePreference}** but some canonicals use the opposite format.\n`;
+      prompt += `All canonical tags should use: **${sitePreference === "www" ? "https://www." : "https://"}${domain.replace("www.", "")}**\n\n`;
+    }
+
+    // Duplicate meta titles
+    if (dupTitles.length > 0) {
+      prompt += `## Fix Duplicate Meta Titles (${dupTitles.length} duplicates)\n\n`;
+      prompt += `Each page should have a unique meta title. These pages share the same title:\n\n`;
+      dupTitles.forEach(([title, pages]) => {
+        prompt += `**"${title}"** used on:\n`;
+        pages.forEach((p) => {
+          prompt += `  - ${new URL(p).pathname}\n`;
+        });
+        prompt += `\n`;
+      });
+    }
+
+    // Duplicate meta descriptions
+    if (dupDescs.length > 0) {
+      prompt += `## Fix Duplicate Meta Descriptions (${dupDescs.length} duplicates)\n\n`;
+      prompt += `Each page should have a unique meta description. These pages share the same description:\n\n`;
+      dupDescs.forEach(([desc, pages]) => {
+        prompt += `**"${desc.slice(0, 80)}${desc.length > 80 ? "..." : ""}"** used on:\n`;
+        pages.forEach((p) => {
+          prompt += `  - ${new URL(p).pathname}\n`;
+        });
+        prompt += `\n`;
+      });
+    }
+
+    prompt += `---\n`;
+    prompt += `Refer to the attached CSV for the complete page-by-page breakdown.\n`;
+
+    return prompt;
+  };
+
+  const copyFixPrompt = () => {
+    const prompt = generateFixPrompt();
+    navigator.clipboard.writeText(prompt);
+    setPromptCopied(true);
+    setTimeout(() => setPromptCopied(false), 2000);
+  };
+
   const filteredResults =
     filter === "all"
       ? results
@@ -589,8 +705,40 @@ export default function Home() {
             </div>
           )}
 
-          {/* Export Button */}
-          <div className="flex justify-end mb-4">
+          {/* Action Buttons */}
+          <div className="flex justify-end gap-3 mb-4">
+            <button
+              onClick={copyFixPrompt}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                promptCopied
+                  ? "bg-green-600 text-white"
+                  : "bg-purple-600 hover:bg-purple-700 text-white"
+              }`}
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                {promptCopied ? (
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
+                ) : (
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
+                  />
+                )}
+              </svg>
+              {promptCopied ? "Copied!" : "Copy Fix Prompt for Cursor"}
+            </button>
             <button
               onClick={exportCSV}
               className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white font-medium transition-colors flex items-center gap-2"
