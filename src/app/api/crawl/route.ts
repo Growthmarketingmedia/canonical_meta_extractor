@@ -9,6 +9,8 @@ interface PageResult {
   metaTitle: string;
   metaDescription: string;
   redirectTo?: string;
+  robots: string;
+  indexable: "Indexable" | "Noindex" | "Unknown";
 }
 
 function normalizeUrl(url: string): string {
@@ -309,6 +311,30 @@ async function checkPage(url: string): Promise<PageResult> {
     const metaDescription =
       $('meta[name="description"]').attr("content")?.trim() || "";
 
+    // Extract robots meta tag (case-insensitive)
+    let robots = "";
+    const robotsMeta = $('meta[name="robots"], meta[name="Robots"], meta[name="ROBOTS"]');
+    if (robotsMeta.length > 0) {
+      robots = (robotsMeta.first().attr("content") || "").trim().toLowerCase();
+    }
+
+    // Also check X-Robots-Tag HTTP header
+    const xRobotsHeader = res.headers.get("x-robots-tag") || "";
+    if (xRobotsHeader && !robots) {
+      robots = xRobotsHeader.toLowerCase();
+    } else if (xRobotsHeader) {
+      robots = `${robots} | X-Robots-Tag: ${xRobotsHeader.toLowerCase()}`;
+    }
+
+    // Determine indexability
+    let indexable: PageResult["indexable"] = "Indexable";
+    if (robots.includes("noindex")) {
+      indexable = "Noindex";
+    } else if (!robots) {
+      // No robots tag = default = indexable
+      indexable = "Indexable";
+    }
+
     // Determine canonical status
     let canonicalStatus: PageResult["canonicalStatus"];
     if (wasRedirected) {
@@ -329,6 +355,8 @@ async function checkPage(url: string): Promise<PageResult> {
       metaTitle,
       metaDescription,
       redirectTo: wasRedirected ? finalUrl : undefined,
+      robots: robots || "(none)",
+      indexable,
     };
   } catch {
     return {
@@ -338,6 +366,8 @@ async function checkPage(url: string): Promise<PageResult> {
       httpStatus: 0,
       metaTitle: "",
       metaDescription: "",
+      robots: "",
+      indexable: "Unknown",
     };
   }
 }

@@ -10,6 +10,8 @@ interface PageResult {
   metaTitle: string;
   metaDescription: string;
   redirectTo?: string;
+  robots: string;
+  indexable: "Indexable" | "Noindex" | "Unknown";
 }
 
 interface WwwStatus {
@@ -145,6 +147,8 @@ export default function Home() {
       "Redirects To",
       "Canonical Uses WWW",
       "HTTP Status",
+      "Indexable",
+      "Robots Meta",
       "Meta Title",
       "Meta Description",
     ];
@@ -155,6 +159,8 @@ export default function Home() {
       r.redirectTo || "",
       r.canonical.includes("://www.") ? "Yes" : "No",
       r.httpStatus,
+      r.indexable,
+      `"${(r.robots || "").replace(/"/g, '""')}"`,
       `"${r.metaTitle.replace(/"/g, '""')}"`,
       `"${r.metaDescription.replace(/"/g, '""')}"`,
     ]);
@@ -303,6 +309,7 @@ export default function Home() {
   const redirectCount = results.filter(
     (r) => r.canonicalStatus === "Redirect"
   ).length;
+  const noindexCount = results.filter((r) => r.indexable === "Noindex").length;
 
   // Exclude from duplicate detection:
   // 1. Redirecting pages — they share meta with their target by design
@@ -670,6 +677,54 @@ export default function Home() {
             </button>
           </div>
 
+          {/* Noindex Pages Warning */}
+          {noindexCount > 0 && (
+            <div className="bg-red-950/30 border border-red-900/50 rounded-lg p-4 mb-6">
+              <div className="flex items-start gap-3">
+                <svg
+                  className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                </svg>
+                <div>
+                  <div className="text-red-400 font-medium mb-1">
+                    {noindexCount} page{noindexCount > 1 ? "s" : ""} set to Noindex
+                  </div>
+                  <div className="text-red-300/80 text-sm">
+                    These pages have a robots meta tag telling search engines not to index them. If unintentional, this is a critical SEO issue — the pages won&apos;t appear in Google search results.
+                  </div>
+                  <ul className="text-red-300/80 text-sm mt-2 space-y-0.5">
+                    {results
+                      .filter((r) => r.indexable === "Noindex")
+                      .map((r) => (
+                        <li key={r.page}>
+                          <a
+                            href={r.page}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-red-300 hover:text-red-200 hover:underline"
+                          >
+                            {new URL(r.page).pathname || "/"}
+                          </a>
+                          <span className="text-red-400/60 ml-2 text-xs">
+                            ({r.robots})
+                          </span>
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Duplicate Meta Tags Panel */}
           {(duplicateTitles.length > 0 || duplicateDescs.length > 0) && (
             <div className="bg-slate-800 rounded-lg p-5 mb-6 border border-slate-700">
@@ -848,6 +903,7 @@ export default function Home() {
                   </th>
                   <th className="text-left px-4 py-3 font-medium">Status</th>
                   <th className="text-left px-4 py-3 font-medium">HTTP</th>
+                  <th className="text-left px-4 py-3 font-medium">Indexable</th>
                   <th className="text-left px-4 py-3 font-medium">
                     Meta Title
                   </th>
@@ -903,6 +959,20 @@ export default function Home() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-slate-400">{r.httpStatus}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                          r.indexable === "Indexable"
+                            ? "bg-green-900/50 text-green-400"
+                            : r.indexable === "Noindex"
+                              ? "bg-red-900/50 text-red-400"
+                              : "bg-slate-700/50 text-slate-400"
+                        }`}
+                        title={r.robots || "No robots meta tag"}
+                      >
+                        {r.indexable}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-slate-300 max-w-[200px]">
                       <div className="truncate" title={r.metaTitle}>
                         {r.metaTitle || (
